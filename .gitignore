@@ -1,5 +1,32 @@
+# Environment
+.env
+.env.*
+
+# Virtual environment
 .venv/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
-.env
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# ChromaDB
+chroma_store/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Node (for React frontend in Week 5)
+node_modules/
+frontend/build/
