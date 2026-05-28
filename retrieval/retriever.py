@@ -5,8 +5,10 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.documents import Document
+from datetime import datetime
+
 
 load_dotenv()
 
@@ -33,6 +35,8 @@ llm = ChatGroq(
 # --- Prompt ---
 prompt = ChatPromptTemplate.from_template("""
 You are a log analysis assistant. Use the following log entries to answer the question.
+Always include the full timestamp and service name for each log entry you mention.
+At the end, add a brief summary of what these errors indicate.
 
 Logs:
 {context}
@@ -41,10 +45,10 @@ Question: {question}
 """)
 
 # --- Chain ---
-def get_chain():
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+def get_chain(search_kwargs):
+    retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
     return (
-        {"context": retriever, "question": RunnablePassthrough()}
+        {"context": retriever | RunnableLambda(format_context), "question": RunnablePassthrough()}
         | prompt
         | llm
     )
@@ -61,7 +65,7 @@ def ingest_logs(log_entries: list[dict]):
         documents.append(Document(
             page_content=content,
             metadata={
-                "timestamp": log.get("timestamp", ""),
+                "timestamp": parse_timestamp(log.get("timestamp", "")),
                 "service_name": log.get("service_name", ""),
                 "log_level": log.get("log_level", "")
             }
@@ -69,7 +73,44 @@ def ingest_logs(log_entries: list[dict]):
     vectorstore.add_documents(documents)
 
 # --- Query ---
-def query_logs(question: str) -> str:
-    chain = get_chain()
+def query_logs(question: str, service_name: str = None, start_time: int = None, end_time: int = None) -> str:
+    filters = []
+
+    if service_name:
+        filters.append({"service_name": service_name})
+    if start_time:
+        filters.append({"timestamp": {"$gte": start_time}})
+    if end_time:
+        filters.append({"timestamp": {"$lte": end_time}})
+
+    search_kwargs = {"k": 5}
+    if len(filters) == 1:
+        search_kwargs["filter"] = filters[0]
+    elif len(filters) > 1:
+        search_kwargs["filter"] = {"$and": filters}
+
+    chain = get_chain(search_kwargs)
     response = chain.invoke(question)
     return response.content
+
+def parse_timestamp(timestamp: str) -> int:
+    formats = [
+        "%Y-%m-%dT%H:%M:%S",           # JSON: 2024-01-15T10:23:01
+        "%Y-%m-%d %H:%M:%S,%f",         # Python: 2024-01-15 10:23:01,234
+        "%d/%b/%Y:%H:%M:%S %z",         # Nginx: 15/Jan/2024:10:23:01 +0000
+    ]
+    for fmt in formats:
+        try:
+            return int(datetime.strptime(timestamp, fmt).timestamp())
+        except ValueError:
+            continue
+    return 0 
+
+def format_context(docs):
+    formatted = []
+    for doc in docs:
+        ts = datetime.fromtimestamp(doc.metadata['timestamp']).strftime('%Y-%m-%d %H:%M:%S') if doc.metadata.get('timestamp') else ""
+        formatted.append(
+            f"[{ts}] [{doc.metadata.get('log_level', '')}] [{doc.metadata.get('service_name', '')}] {doc.page_content}"
+        )
+    return "\n".join(formatted)

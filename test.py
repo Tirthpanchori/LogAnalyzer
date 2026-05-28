@@ -12,5 +12,9 @@ ingest_logs(all_logs)
 print(f"Ingested {len(all_logs)} logs")
 
 # Query
-response = query_logs("what errors occurred in the auth service?")
-print("\nAnswer:", response)
+# Filtered query
+response = query_logs(
+    "what errors occurred?",
+    service_name="auth-service"
+)
+print("\nFiltered answer:", response)
