@@ -30,12 +30,12 @@ def parse_nginx_log(line):
 
 def parse_json_log(line):
     try:
-        log_entry = json.loads(line)
+        data = json.loads(line)
         return {
-            "timestamp": log_entry.get("timestamp", ""),
-            "log_level": log_entry.get("log_level", ""),
-            "service_name": log_entry.get("service_name", ""),
-            "message": log_entry.get("message", "")
+            "timestamp": data.get("timestamp", ""),
+            "log_level": data.get("level", "") or data.get("log_level", ""),
+            "service_name": data.get("service", "") or data.get("service_name", ""),
+            "message": data.get("message", "")
         }
     except json.JSONDecodeError:
         return None

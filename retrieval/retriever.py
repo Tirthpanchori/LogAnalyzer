@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -7,24 +8,17 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.documents import Document
-from datetime import datetime
-
 
 load_dotenv()
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'ingestion'))
 from log_parser import parse_python_log, parse_nginx_log, parse_json_log
 
-# --- Embedding model (loaded once, reused) ---
+# --- Embedding model (loaded once, reused across all sessions) ---
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-# --- ChromaDB with persistent path ---
+# --- ChromaDB persistent path ---
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_store")
-vectorstore = Chroma(
-    collection_name="logs",
-    embedding_function=embeddings,
-    persist_directory=CHROMA_PATH
-)
 
 # --- LLM ---
 llm = ChatGroq(
@@ -44,17 +38,41 @@ Logs:
 Question: {question}
 """)
 
-# --- Chain ---
-def get_chain(search_kwargs):
-    retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
-    return (
-        {"context": retriever | RunnableLambda(format_context), "question": RunnablePassthrough()}
-        | prompt
-        | llm
+# --- Per-session vectorstore ---
+def get_vectorstore(session_id: str) -> Chroma:
+    return Chroma(
+        collection_name=f"logs_{session_id}",
+        embedding_function=embeddings,
+        persist_directory=CHROMA_PATH
     )
 
-# --- Ingest logs into vectorstore ---
-def ingest_logs(log_entries: list[dict]):
+# --- Timestamp parser ---
+def parse_timestamp(timestamp: str) -> int:
+    formats = [
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S,%f",
+        "%d/%b/%Y:%H:%M:%S %z",
+    ]
+    for fmt in formats:
+        try:
+            return int(datetime.strptime(timestamp, fmt).timestamp())
+        except ValueError:
+            continue
+    return 0
+
+# --- Format context for LLM ---
+def format_context(docs):
+    formatted = []
+    for doc in docs:
+        ts = datetime.fromtimestamp(doc.metadata['timestamp']).strftime('%Y-%m-%d %H:%M:%S') if doc.metadata.get('timestamp') else ""
+        formatted.append(
+            f"[{ts}] [{doc.metadata.get('log_level', '')}] [{doc.metadata.get('service_name', '')}] {doc.page_content}"
+        )
+    return "\n".join(formatted)
+
+# --- Ingest logs into a session collection ---
+def ingest_logs(log_entries: list[dict], session_id: str):
+    vectorstore = get_vectorstore(session_id)
     documents = []
     for log in log_entries:
         if "message" in log:
@@ -62,18 +80,20 @@ def ingest_logs(log_entries: list[dict]):
         else:
             content = f"{log['method']} {log['path']} {log['status_code']}"
 
+        ts = parse_timestamp(log.get("timestamp", ""))
         documents.append(Document(
             page_content=content,
             metadata={
-                "timestamp": parse_timestamp(log.get("timestamp", "")),
+                "timestamp": ts,
                 "service_name": log.get("service_name", ""),
                 "log_level": log.get("log_level", "")
             }
         ))
     vectorstore.add_documents(documents)
 
-# --- Query ---
-def query_logs(question: str, service_name: str = None, start_time: int = None, end_time: int = None) -> str:
+# --- Query logs in a session collection ---
+def query_logs(question: str, session_id: str, service_name: str = None, start_time: int = None, end_time: int = None) -> str:
+    vectorstore = get_vectorstore(session_id)
     filters = []
 
     if service_name:
@@ -89,28 +109,25 @@ def query_logs(question: str, service_name: str = None, start_time: int = None, 
     elif len(filters) > 1:
         search_kwargs["filter"] = {"$and": filters}
 
-    chain = get_chain(search_kwargs)
+    retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
+    chain = (
+        {"context": retriever | RunnableLambda(format_context), "question": RunnablePassthrough()}
+        | prompt
+        | llm
+    )
     response = chain.invoke(question)
     return response.content
 
-def parse_timestamp(timestamp: str) -> int:
-    formats = [
-        "%Y-%m-%dT%H:%M:%S",           # JSON: 2024-01-15T10:23:01
-        "%Y-%m-%d %H:%M:%S,%f",         # Python: 2024-01-15 10:23:01,234
-        "%d/%b/%Y:%H:%M:%S %z",         # Nginx: 15/Jan/2024:10:23:01 +0000
-    ]
-    for fmt in formats:
-        try:
-            return int(datetime.strptime(timestamp, fmt).timestamp())
-        except ValueError:
-            continue
-    return 0 
+# --- Get retriever function for RAT loop ---
+def get_retriever_fn(session_id: str):
+    vectorstore = get_vectorstore(session_id)
+    def retrieve_fn(query: str) -> str:
+        docs = vectorstore.as_retriever(search_kwargs={"k": 5}).invoke(query)
+        return format_context(docs)
+    return retrieve_fn
 
-def format_context(docs):
-    formatted = []
-    for doc in docs:
-        ts = datetime.fromtimestamp(doc.metadata['timestamp']).strftime('%Y-%m-%d %H:%M:%S') if doc.metadata.get('timestamp') else ""
-        formatted.append(
-            f"[{ts}] [{doc.metadata.get('log_level', '')}] [{doc.metadata.get('service_name', '')}] {doc.page_content}"
-        )
-    return "\n".join(formatted)
+# --- Delete a session collection ---
+def delete_session(session_id: str):
+    import chromadb
+    client = chromadb.PersistentClient(path=CHROMA_PATH)
+    client.delete_collection(f"logs_{session_id}")
