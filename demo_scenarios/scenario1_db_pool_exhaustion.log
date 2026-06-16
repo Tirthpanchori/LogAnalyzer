@@ -1,0 +1,30 @@
+2024-01-15 10:00:01,000 INFO auth-service: Service started successfully
+2024-01-15 10:00:02,000 INFO auth-service: Connected to database pool max=20
+2024-01-15 10:01:00,000 INFO api-gateway: Listening on port 8080
+2024-01-15 10:01:30,000 INFO payment-service: Payment processor initialized
+2024-01-15 10:02:00,000 INFO auth-service: Handling 150 concurrent requests
+2024-01-15 10:02:30,000 WARNING auth-service: DB connection pool at 75% capacity 15/20
+2024-01-15 10:03:00,000 WARNING auth-service: DB connection pool reaching capacity 18/20
+2024-01-15 10:03:30,000 ERROR auth-service: DB connection pool exhausted max=20
+2024-01-15 10:03:31,000 ERROR auth-service: Cannot acquire DB connection all slots taken
+2024-01-15 10:03:32,000 ERROR auth-service: Request failed due to DB unavailability
+2024-01-15 10:03:33,000 ERROR auth-service: Request failed due to DB unavailability
+2024-01-15 10:03:34,000 ERROR auth-service: Request failed due to DB unavailability
+2024-01-15 10:04:00,000 WARNING api-gateway: Upstream auth-service response slow 2500ms
+2024-01-15 10:04:05,000 ERROR api-gateway: Timeout waiting for auth-service after 30s
+2024-01-15 10:04:06,000 ERROR api-gateway: Cannot reach auth-service returning 503
+2024-01-15 10:04:07,000 ERROR api-gateway: Upstream service timeout after 30s
+2024-01-15 10:04:08,000 ERROR api-gateway: Failed to forward request to auth-service
+2024-01-15 10:04:30,000 WARNING payment-service: Auth service returning errors intermittently
+2024-01-15 10:04:35,000 ERROR payment-service: Cannot process payment auth service unavailable
+2024-01-15 10:04:36,000 ERROR payment-service: Payment 1001 failed auth check timeout
+2024-01-15 10:04:37,000 ERROR payment-service: Payment 1002 failed auth check timeout
+2024-01-15 10:04:38,000 ERROR payment-service: Payment 1003 failed auth check timeout
+2024-01-15 10:05:00,000 ERROR payment-service: Returning 503 to clients
+2024-01-15 10:05:01,000 ERROR api-gateway: Cascading failure detected multiple services down
+2024-01-15 10:05:02,000 ERROR auth-service: All connection attempts to DB failed
+2024-01-15 10:05:30,000 INFO auth-service: DB connection pool partially recovered 5/20
+2024-01-15 10:06:00,000 INFO auth-service: DB connection pool recovering 12/20
+2024-01-15 10:06:30,000 INFO auth-service: DB connection pool restored max=20
+2024-01-15 10:06:31,000 INFO api-gateway: auth-service back online
+2024-01-15 10:06:32,000 INFO payment-service: Retrying failed payments
