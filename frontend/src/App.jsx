@@ -8,7 +8,7 @@ import AnalyzingSteps from "./components/AnalyzingSteps.jsx";
 import axios from "axios";
 import "./App.css";
 
-const API = "http://127.0.0.1:8000";
+const API = "https://loganalyzer-jonr.onrender.com"
 
 export default function App() {
   const [sessionId, setSessionId] = useState(null);
