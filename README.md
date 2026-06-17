@@ -27,7 +27,7 @@ Unlike a basic RAG system that retrieves relevant chunks and answers in one shot
 |---|---|
 | LLM | Groq API + Llama 3.1 8B |
 | Orchestration | LangChain (LCEL) |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
+| Embeddings | HF Inference API (all-MiniLM-L6-v2) |
 | Vector DB | ChromaDB (persistent) |
 | Backend | FastAPI |
 | Frontend | React + Vite |
@@ -108,6 +108,7 @@ Open `http://localhost:5173`
 
 ## Environment Variables
 GROQ_API_KEY=your_groq_api_key
+HF_TOKEN=your_huggingface_token
 CHROMA_PATH=./chroma_store        # Local
 
 CHROMA_PATH=/data/chroma_store  # Render deployment
