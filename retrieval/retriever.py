@@ -3,7 +3,7 @@ import sys
 from datetime import datetime
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
@@ -15,7 +15,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'ingestion'))
 from log_parser import parse_python_log, parse_nginx_log, parse_json_log
 
 # --- Embedding model (loaded once, reused across all sessions) ---
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+embeddings = HuggingFaceEndpointEmbeddings(
+    model="sentence-transformers/all-MiniLM-L6-v2",
+    huggingfacehub_api_token=os.getenv("HF_TOKEN")
+)
 
 # --- ChromaDB persistent path ---
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_store")
